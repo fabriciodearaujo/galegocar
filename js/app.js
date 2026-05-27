@@ -180,13 +180,13 @@ async function load(){
 function nav(view){
   app.view=view;
   document.querySelectorAll('.ni, nav button').forEach(el=> {
-    el.classList.remove('bg-[#1E0E03]', 'text-accent', 'border border-[#3A1A06]');
+    el.classList.remove('bg-[#1E0E03]', 'text-accent', 'border', 'border-[#3A1A06]');
     el.classList.add('text-textMuted');
   });
   const active = ge('n-'+view);
   if(active){
     active.classList.remove('text-textMuted');
-    active.classList.add('bg-[#1E0E03]', 'text-accent', 'border border-[#3A1A06]');
+    active.classList.add('bg-[#1E0E03]', 'text-accent', 'border', 'border-[#3A1A06]');
   }
   render();
 }
