@@ -23,11 +23,18 @@ const ST_CLASSES = {
   concluido: 'bg-success/10 text-success border border-success/20',
   entregue: 'bg-surface3 text-textDim border border-border'
 };
+const stColor = { 
+  aguardando: '#FBBF24', 
+  andamento: '#60A5FA', 
+  pecas: '#F97316', 
+  concluido: '#4ADE80', 
+  entregue: '#5C5854' 
+};
 
 function getBadgeHtml(st){
   const label = ST[st]?.label || ST.aguardando.label;
   const cls = ST_CLASSES[st] || ST_CLASSES.aguardando;
-  return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider \${cls}">\${label}</span>`;
+  return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${cls}">${label}</span>`;
 }
 
 function toast(msg){
@@ -184,8 +191,13 @@ function nav(view){
   render();
 }
 function render(){
-  const views={dashboard:dashView,vehicles:vehView,orders:ordView,settings:setView};
-  ge('ct').innerHTML=(views[app.view]||dashView)();
+  try {
+    const views={dashboard:dashView,vehicles:vehView,orders:ordView,settings:setView};
+    ge('ct').innerHTML=(views[app.view]||dashView)();
+  } catch (e) {
+    console.error('Render Error:', e);
+    ge('ct').innerHTML = `<div class="p-8 text-error font-bold">Erro ao renderizar a página: ${e.message}</div>`;
+  }
 }
 
 // ── DASHBOARD ─────────────────────────────────────
