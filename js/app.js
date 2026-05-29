@@ -203,8 +203,6 @@ function render(){
   }
 }
 
-}
-
 // ── DASHBOARD ─────────────────────────────────────
 function dashView(){
   const vs=app.vehicles;
