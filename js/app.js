@@ -1000,12 +1000,34 @@ function histView(){
 }
 
 async function delSale(id){
-  if(!confirm('Excluir esta venda? Esta ação não pode ser desfeita.')) return;
-  const { error } = await db.from('sales').delete().eq('id', id);
-  if(error){ toast('❌ Erro ao excluir: ' + error.message); return; }
-  app.sales = app.sales.filter(s => s.id !== id);
-  render();
-  toast('✓ Venda removida');
+  if(!confirm('Excluir esta venda? Os produtos voltarão ao estoque.')) return;
+  
+  try {
+    // 1. Buscar itens da venda antes de deletar
+    const { data: items, error: iErr } = await db.from('sale_items').select('inventory_id, quantity').eq('sale_id', id);
+    if(iErr) throw iErr;
+
+    // 2. Devolver itens ao estoque
+    if(items && items.length > 0){
+      for(const it of items){
+        if(!it.inventory_id) continue;
+        const part = app.inventory.find(p => p.id === it.inventory_id);
+        const currentQty = part ? part.quantity : 0;
+        await db.from('inventory').update({ quantity: currentQty + it.quantity }).eq('id', it.inventory_id);
+      }
+    }
+
+    // 3. Deletar a venda (Cascata remove os itens)
+    const { error: sErr } = await db.from('sales').delete().eq('id', id);
+    if(sErr) throw sErr;
+
+    app.sales = app.sales.filter(s => s.id !== id);
+    await load(); // Recarrega estoque e vendas para sincronizar tudo
+    render();
+    toast('✓ Venda removida e estoque restaurado');
+  } catch(e) {
+    toast('❌ Erro ao excluir: ' + e.message);
+  }
 }
 
 
