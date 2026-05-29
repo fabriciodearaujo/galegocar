@@ -654,6 +654,7 @@ function openOM(id, pre){
       ge('om-cc').value=o.clientCpf||''; ge('om-ca').value=o.clientAddr||'';
       ge('om-labor').value=o.labor||0; ge('om-disc').value=o.discount||0;
       ge('om-obs').value=o.notes||''; ge('om-vid').value=o.vehicleId||'';
+      ge('om-mech').value=o.mechanic_name||'';
       items=(o.items||[]).map(i=>({...i}));
     }
   } else if(pre){
@@ -663,9 +664,10 @@ function openOM(id, pre){
     ge('om-cc').value=pre.client?.cpf||''; ge('om-ca').value='';
     ge('om-labor').value=0; ge('om-disc').value=0;
     ge('om-obs').value=pre.service||''; ge('om-vid').value=pre.id||'';
+    ge('om-mech').value='';
     if(pre.service) items.push({desc:pre.service,qty:1,unit:0,total:0});
   } else {
-    ['om-plate','om-model','om-brand','om-year','om-color','om-km','om-cn','om-cp','om-cc','om-ca','om-obs'].forEach(i=>ge(i).value='');
+    ['om-plate','om-model','om-brand','om-year','om-color','om-km','om-cn','om-cp','om-cc','om-ca','om-obs','om-mech'].forEach(i=>ge(i).value='');
     ge('om-labor').value=0; ge('om-disc').value=0;
   }
   renderItems(); calcTot(); ge('om').classList.replace('hidden','flex');
@@ -741,7 +743,7 @@ async function saveOrder(){
     clientName:cn, clientPhone:ge('om-cp').value.trim(),
     clientCpf:ge('om-cc').value.trim(), clientAddr:ge('om-ca').value.trim(),
     items:items.map(i=>({...i})), labor:lab, discount:dsc, total:ttl,
-    notes:ge('om-obs').value.trim(), date:new Date().toISOString()
+    notes:ge('om-obs').value.trim(), mechanic_name:ge('om-mech').value.trim(), date:new Date().toISOString()
   };
   btnLoad('om-save-btn',true);
   
@@ -757,7 +759,7 @@ async function saveOrder(){
         await db.from('inventory').update({ quantity: newQty }).eq('id', part.id);
       }
     }
-
+  
     let res;
     if(id){
       res=await db.from('orders').update(oToDB(order,false)).eq('id',id).select().single();
@@ -1146,7 +1148,8 @@ function printO(id){
     </div></div>
     ${o.notes?`<div class="po-obs"><div class="po-obl">Observações:</div><div class="po-obt">${esc(o.notes)}</div></div>`:''}
     <div class="po-sgs">
-      <div class="po-sg"><div class="po-sgl">Responsável pela Oficina</div><div class="po-sgn">${esc(w.resp||w.name||'')}</div></div>
+      <div class="po-sg"><div class="po-sgl">Responsável Oficina</div><div class="po-sgn">${esc(w.resp||w.name||'')}</div></div>
+      <div class="po-sg"><div class="po-sgl">Mecânico Responsável</div><div class="po-sgn">${esc(o.mechanic_name || '—')}</div></div>
       <div class="po-sg"><div class="po-sgl">Assinatura do Cliente</div><div class="po-sgn">${esc(o.clientName||'')}</div></div>
     </div>
   </div>`;
