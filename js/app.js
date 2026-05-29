@@ -789,34 +789,44 @@ async function delO(id){
   if(!confirm('Excluir esta ordem de serviço? Os produtos utilizados voltarão ao estoque.')) return;
   
   try {
-    // 1. Buscar a OS para pegar os itens
+    console.log('Iniciando restauração de estoque para OS:', id);
     const { data: order, error: oErr } = await db.from('orders').select('items').eq('id', id).single();
     if(oErr) throw oErr;
 
-    // 2. Devolver itens ao estoque
     if(order && order.items && Array.isArray(order.items)){
       for(const it of order.items){
-        if(it.inventoryId){
-          // Busca quantidade atual para evitar erros de concorrência
-          const { data: part } = await db.from('inventory').select('quantity').eq('id', it.inventoryId).single();
-          const currentQty = parseFloat(part?.quantity || 0);
+        let partId = it.inventoryId;
+        
+        // FALLBACK: Se não tem ID, tenta achar pelo nome da peça
+        if(!partId && it.desc){
+          console.log(`Tentando localizar peça por nome: ${it.desc}`);
+          const part = app.inventory.find(p => p.name.trim().toLowerCase() === it.desc.trim().toLowerCase());
+          if(part) partId = part.id;
+        }
+
+        if(partId){
+          const { data: partData } = await db.from('inventory').select('quantity').eq('id', partId).single();
+          const currentQty = parseFloat(partData?.quantity || 0);
           const returnQty = parseFloat(it.qty || 0);
+          const newQty = currentQty + returnQty;
           
-          await db.from('inventory').update({ quantity: currentQty + returnQty }).eq('id', it.inventoryId);
+          console.log(`Devolvendo ${returnQty} unid. da peça ${partId}. ${currentQty} -> ${newQty}`);
+          await db.from('inventory').update({ quantity: newQty }).eq('id', partId);
+        } else {
+          console.warn(`Não foi possível identificar a peça para devolver: ${it.desc || 'Sem nome'}`);
         }
       }
     }
 
-    // 3. Deletar a OS
     const { error: dErr } = await db.from('orders').delete().eq('id', id);
     if(dErr) throw dErr;
 
     app.orders = app.orders.filter(o => o.id !== id);
-    await load(); // Sincroniza estoque e ordens
+    await load(); 
     render();
     toast('✓ Ordem removida e estoque restaurado');
   } catch(e) {
-    console.error('Erro ao excluir OS:', e);
+    console.error('Erro crítico ao excluir OS:', e);
     toast('❌ Erro ao excluir: ' + e.message);
   }
 }
