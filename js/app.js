@@ -1064,9 +1064,21 @@ async function delSale(id){
 
 
 async function printSale(id){
-  const sale = app.sales.find(s => s.id === id);
-  if(!sale) return;
-  const { data: items } = await db.from('sale_items').select('*').eq('sale_id', id);
+  // Busca a venda atualizada diretamente do banco para evitar erro de cache/estado
+  const { data: sale, error: sErr } = await db.from('sales').select('*').eq('id', id).single();
+  if(sErr || !sale) {
+    console.error('Erro ao buscar venda:', sErr);
+    toast('❌ Erro ao carregar dados da venda');
+    return;
+  }
+  
+  const { data: items, error: iErr } = await db.from('sale_items').select('*').eq('sale_id', id);
+  if(iErr) {
+    console.error('Erro ao buscar itens:', iErr);
+    toast('❌ Erro ao carregar itens da venda');
+    return;
+  }
+  
   const w = app.workshop;
   
   const itRows = items.map(i => {
@@ -1076,6 +1088,7 @@ async function printSale(id){
   }).join('');
   
   const clientName = sale.customer_name || (app.vehicles.find(v => v.id === sale.customer_id)?.client.name) || 'Avulsa';
+  const discVal = parseFloat(sale.discount || 0);
 
   ge('prt').innerHTML = `
     <div style="text-align:center; font-family: monospace; width: 80mm; margin: 0 auto;">
@@ -1089,7 +1102,10 @@ async function printSale(id){
         <thead><tr style="border-bottom: 1px solid #000"><th>Item</th><th>Qtd</th><th>Uni</th><th>Tot</th></tr></thead>
         <tbody>${itRows}</tbody>
       </table>
-      <div style="border-top: 1px solid #000; margin-top: 10px; padding-top: 5px; text-align: right; font-weight: bold; font-size: 16px;">
+      <div style="text-align: right; font-size: 12px; margin-top: 5px;">
+        ${discVal > 0 ? `<div>Desconto: -${fmt(discVal)}</div>` : ''}
+      </div>
+      <div style="border-top: 1px solid #000; margin-top: 5px; padding-top: 5px; text-align: right; font-weight: bold; font-size: 16px;">
         TOTAL: ${fmt(sale.total)}
       </div>
       <div style="text-align: center; font-size: 10px; margin-top: 20px;">Obrigado pela preferência!</div>
