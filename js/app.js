@@ -820,18 +820,21 @@ function calcCartTot(){
 }
 
 async function finalizeSale(){
-  const custId = ge('pos-cust')?.value;
+  const custName = ge('pos-cust')?.value;
   const method = ge('pos-pay')?.value;
   const disc = parseFloat(ge('pos-disc')?.value || 0);
   if(app.cart.length === 0){ alert('Carrinho vazio!'); return; }
   if(!method){ alert('Selecione a forma de pagamento!'); return; }
   
+  const vehicle = app.vehicles.find(v => v.client.name === custName);
+  const custId = vehicle ? vehicle.id : null;
+
   const { sub, total } = calcCartTot();
   btnLoad('pos-save-btn', true);
   
   try {
     const { data: sale, error: sErr } = await db.from('sales').insert({
-      customer_id: custId || null, total, discount: disc, payment_method: method
+      customer_id: custId, total, discount: disc, payment_method: method
     }).select().single();
     if(sErr) throw sErr;
     
