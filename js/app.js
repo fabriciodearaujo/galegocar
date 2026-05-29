@@ -865,6 +865,12 @@ async function finalizeSale(){
   }
 }
 
+function updatePosTotal(){
+  const totalData = calcCartTot();
+  const totalEl = ge('pos-total-val');
+  if(totalEl) totalEl.textContent = fmt(totalData.total);
+}
+
 function posView(){
   const totalData = calcCartTot();
   const rows = app.cart.map(c => `
@@ -925,11 +931,11 @@ function posView(){
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-[10px] text-textMuted uppercase">Desconto (R$)</label>
-          <input type="number" id="pos-disc" oninput="render()" value="0" class="bg-surface2 border border-border rounded p-2 text-xs outline-none focus:border-accent">
+          <input type="number" id="pos-disc" oninput="updatePosTotal()" value="0" class="bg-surface2 border border-border rounded p-2 text-xs outline-none focus:border-accent">
         </div>
         <div class="flex justify-between items-center py-2 border-t border-border">
           <span class="text-sm font-semibold">Total:</span>
-          <span class="text-2xl font-rajdhani font-bold text-accent">${fmt(totalData.total)}</span>
+          <span id="pos-total-val" class="text-2xl font-rajdhani font-bold text-accent">${fmt(totalData.total)}</span>
         </div>
         <button id="pos-save-btn" onclick="finalizeSale()" class="w-full bg-accent hover:bg-accentHover text-white py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-2">
           Finalizar Venda
