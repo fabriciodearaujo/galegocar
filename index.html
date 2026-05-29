@@ -93,11 +93,16 @@
             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
             <span class="hidden md:inline">Dashboard</span>
         </button>
-        <button onclick="nav('vehicles')" id="n-vehicles" class="flex items-center gap-3 p-2 rounded-lg text-textMuted hover:bg-surface2 hover:text-textMain transition-all flex-1 md:flex-none text-xs font-medium">
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M14 3v4h5"/></svg>
-            <span class="hidden md:inline">Veículos</span>
-        </button>
-        <button onclick="nav('orders')" id="n-orders" class="flex items-center gap-3 p-2 rounded-lg text-textMuted hover:bg-surface2 hover:text-textMain transition-all flex-1 md:flex-none text-xs font-medium">
+    <button onclick="nav('vehicles')" id="n-vehicles" class="flex items-center gap-3 p-2 rounded-lg text-textMuted hover:bg-surface2 hover:text-textMain transition-all flex-1 md:flex-none text-xs font-medium">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M14 3v4h5"/></svg>
+        <span class="hidden md:inline">Veículos</span>
+    </button>
+    <button onclick="nav('inventory')" id="n-inventory" class="flex items-center gap-3 p-2 rounded-lg text-textMuted hover:bg-surface2 hover:text-textMain transition-all flex-1 md:flex-none text-xs font-medium">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M10 12h4"/></svg>
+        <span class="hidden md:inline">Estoque</span>
+    </button>
+    <button onclick="nav('orders')" id="n-orders" class="flex items-center gap-3 p-2 rounded-lg text-textMuted hover:bg-surface2 hover:text-textMain transition-all flex-1 md:flex-none text-xs font-medium">
+
             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             <span class="hidden md:inline">Ordens de Serviço</span>
         </button>
@@ -216,6 +221,54 @@
             <button id="vm-save-btn" onclick="saveVehicle()" class="bg-accent hover:bg-accentHover text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all flex items-center gap-2">
                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                 Salvar Veículo
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Inventory Modal -->
+<div id="im" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/80 p-4 overflow-y-auto">
+    <div class="bg-surface border border-border rounded-xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div class="sticky top-0 bg-surface border-b border-border p-4 flex items-center justify-between z-10">
+            <h2 id="im-tit" class="text-xl font-rajdhani font-bold">Cadastrar Peça</h2>
+            <button onclick="closeModal('im')" class="p-1 text-textMuted hover:text-textMain transition-colors">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <input type="hidden" id="im-id">
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-semibold text-textMuted uppercase tracking-wider">Nome da Peça *</label>
+                <input type="text" id="im-name" class="bg-surface2 border border-border rounded-lg p-2 text-textMain outline-none focus:border-accent transition-colors" placeholder="Ex: Filtro de Óleo">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-semibold text-textMuted uppercase tracking-wider">Descrição</label>
+                <textarea id="im-desc" class="bg-surface2 border border-border rounded-lg p-2 text-textMain outline-none focus:border-accent transition-colors" placeholder="Detalhes da peça..."></textarea>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-semibold text-textMuted uppercase tracking-wider">Qtd Atual</label>
+                    <input type="number" id="im-qty" class="bg-surface2 border border-border rounded-lg p-2 text-textMain outline-none focus:border-accent transition-colors" value="0">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-semibold text-textMuted uppercase tracking-wider">Qtd Mínima</label>
+                    <input type="number" id="im-min" class="bg-surface2 border border-border rounded-lg p-2 text-textMain outline-none focus:border-accent transition-colors" value="5">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-semibold text-textMuted uppercase tracking-wider">Preço Unit. (R$)</label>
+                    <input type="number" id="im-price" step="0.01" class="bg-surface2 border border-border rounded-lg p-2 text-textMain outline-none focus:border-accent transition-colors" value="0.00">
+                </div>
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-semibold text-textMuted uppercase tracking-wider">Fornecedor</label>
+                <input type="text" id="im-sup" class="bg-surface2 border border-border rounded-lg p-2 text-textMain outline-none focus:border-accent transition-colors" placeholder="Nome do fornecedor">
+            </div>
+        </div>
+        <div class="sticky bottom-0 bg-surface border-t border-border p-4 flex gap-3 justify-end">
+            <button onclick="closeModal('im')" class="px-4 py-2 text-textMuted hover:text-textMain transition-colors font-medium text-sm">Cancelar</button>
+            <button id="im-save-btn" onclick="saveItem()" class="bg-accent hover:bg-accentHover text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all flex items-center gap-2">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Salvar Peça
             </button>
         </div>
     </div>

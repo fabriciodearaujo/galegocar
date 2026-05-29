@@ -1,6 +1,6 @@
 // ── STATE ─────────────────────────────────────────
 let app = {
-  vehicles: [], orders: [],
+  vehicles: [], orders: [], inventory: [],
   workshop: { name:'Minha Oficina', cnpj:'', address:'', city:'', phone:'', email:'', resp:'' },
   view: 'dashboard'
 };
@@ -148,14 +148,16 @@ async function load(){
   showLoad('Conectando ao banco de dados...');
   setConn('loading','Conectando...');
   try {
-    const [wsR, vR, oR] = await Promise.all([
+    const [wsR, vR, oR, iR] = await Promise.all([
       db.from('workshop_settings').select('*').eq('id',1).maybeSingle(),
       db.from('vehicles').select('*').order('created_at',{ascending:true}),
-      db.from('orders').select('*').order('number',{ascending:true})
+      db.from('orders').select('*').order('number',{ascending:true}),
+      db.from('inventory').select('*').order('name',{ascending:true})
     ]);
     if(wsR.error) throw wsR.error;
     if(vR.error) throw vR.error;
     if(oR.error) throw oR.error;
+    if(iR.error) throw iR.error;
     if(wsR.data){
       app.workshop = {
         name:wsR.data.name||'Minha Oficina', cnpj:wsR.data.cnpj||'',
@@ -165,6 +167,7 @@ async function load(){
     }
     app.vehicles = (vR.data||[]).map(vFromDB);
     app.orders = (oR.data||[]).map(oFromDB);
+    app.inventory = (iR.data||[]);
     ge('sb-wn').textContent = app.workshop.name;
     setConn('ok','Conectado');
   } catch(e){
@@ -192,12 +195,14 @@ function nav(view){
 }
 function render(){
   try {
-    const views={dashboard:dashView,vehicles:vehView,orders:ordView,settings:setView};
+    const views={dashboard:dashView,vehicles:vehView,inventory:invView,orders:ordView,settings:setView};
     ge('ct').innerHTML=(views[app.view]||dashView)();
   } catch (e) {
     console.error('Render Error:', e);
     ge('ct').innerHTML = `<div class="p-8 text-error font-bold">Erro ao renderizar a página: ${e.message}</div>`;
   }
+}
+
 }
 
 // ── DASHBOARD ─────────────────────────────────────
@@ -526,7 +531,108 @@ async function updSt(id, st){
   toast('✓ Status atualizado');
 }
 
-// ── ORDER CRUD ────────────────────────────────────
+// ── INVENTORY CRUD ─────────────────────────────────
+function openIM(id){
+  ge('im-tit').textContent=id?'Editar Peça':'Cadastrar Peça';
+  ge('im-id').value=id||'';
+  const item=id?app.inventory.find(x=>x.id===id):null;
+  ge('im-name').value=item?.name||''; ge('im-desc').value=item?.description||'';
+  ge('im-qty').value=item?.quantity||0; ge('im-min').value=item?.min_quantity||5;
+  ge('im-price').value=item?.unit_price||0; ge('im-sup').value=item?.supplier||'';
+  ge('im').classList.replace('hidden','flex');
+}
+
+async function saveItem(){
+  const id=ge('im-id').value;
+  const name=ge('im-name').value.trim();
+  if(!name){alert('Informe o nome da peça.');return;}
+  const item={
+    name, description:ge('im-desc').value.trim(),
+    quantity:parseInt(ge('im-qty').value)||0, min_quantity:parseInt(ge('im-min').value)||5,
+    unit_price:parseFloat(ge('im-price').value)||0, supplier:ge('im-sup').value.trim()
+  };
+  btnLoad('im-save-btn',true);
+  let res;
+  if(id){
+    res=await db.from('inventory').update(item).eq('id',id).select().single();
+  } else {
+    res=await db.from('inventory').insert(item).select().single();
+  }
+  btnLoad('im-save-btn',false);
+  if(res.error){toast('❌ Erro: '+res.error.message);return;}
+  if(id){const i=app.inventory.findIndex(x=>x.id===id);if(i>=0)app.inventory[i]=res.data;}
+  else app.inventory.push(res.data);
+  closeModal('im'); render(); toast('✓ Estoque atualizado');
+}
+
+async function delItem(id){
+  if(!confirm('Excluir esta peça?'))return;
+  const {error}=await db.from('inventory').delete().eq('id',id);
+  if(error){toast('❌ Erro: '+error.message);return;}
+  app.inventory=app.inventory.filter(i=>i.id!==id);
+  render(); toast('Peça removida');
+}
+
+function invView(){
+  const inv=app.inventory;
+  const lowStock=inv.filter(i=>i.quantity<=i.min_quantity).length;
+  const rows=inv.length===0?emptyRow(6):
+    inv.map(i=>`
+    <tr class="border-b border-border hover:bg-surface2 transition-colors">
+      <td class="p-3 font-medium">${esc(i.name)}</td>
+      <td class="p-3 text-center">${i.quantity}</td>
+      <td class="p-3 text-right">${fmt(i.unit_price)}</td>
+      <td class="p-3">${esc(i.supplier||'—')}</td>
+      <td class="p-3">${getBadgeHtml(i.quantity<=i.min_quantity?'pecas':'concluido')}</td>
+      <td class="p-3">
+        <div class="flex gap-2">
+          <button class="p-1.5 bg-transparent border border-border text-textMuted hover:text-textMain rounded-lg transition-colors" onclick="openIM('${i.id}')" title="Editar">${iEdit}</button>
+          <button class="p-1.5 bg-error/10 text-error border border-error/20 hover:bg-error/20 rounded-lg transition-colors" onclick="delItem('${i.id}')" title="Excluir">${iTrash}</button>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  return `
+  <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-rajdhani font-bold tracking-tight">Estoque de Peças</h1>
+      <p class="text-xs text-textMuted">Controle de inventário da oficina</p>
+    </div>
+    <button onclick="openIM()" class="bg-accent hover:bg-accentHover text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all flex items-center gap-2">
+      ${iPlus} Cadastrar Peça
+    </button>
+  </header>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+    <div class="bg-surface border border-border rounded-xl p-4">
+      <div class="text-[10px] text-textDim uppercase tracking-widest mb-1">Total de Itens</div>
+      <div class="text-3xl font-rajdhani font-bold text-info">${inv.length}</div>
+    </div>
+    <div class="bg-surface border border-border rounded-xl p-4 ${lowStock>0?'border-error/50':''}">
+      <div class="text-[10px] text-textDim uppercase tracking-widest mb-1">Estoque Baixo</div>
+      <div class="text-3xl font-rajdhani font-bold ${lowStock>0?'text-error':'text-success'}">${lowStock}</div>
+    </div>
+  </div>
+  <div class="bg-surface border border-border rounded-xl overflow-hidden">
+    <div class="p-4 border-b border-border flex justify-between items-center">
+      <h3 class="text-sm font-semibold">Lista de Peças</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead>
+          <tr class="bg-surface2 text-textDim uppercase tracking-wider">
+            <th class="p-3 border-b border-border">Peça</th>
+            <th class="p-3 border-b border-border text-center">Qtd</th>
+            <th class="p-3 border-b border-border text-right">Preço</th>
+            <th class="p-3 border-b border-border">Fornecedor</th>
+            <th class="p-3 border-b border-border">Status</th>
+            <th class="p-3 border-b border-border">Ações</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
 function openOMfromV(vid){
   const v=app.vehicles.find(x=>x.id===vid);
   if(v) openOM(null,v);
@@ -581,12 +687,28 @@ function renderItems(){
     ?'<tr><td colspan="5" class="p-3 text-center text-textDim text-xs italic">Nenhum item. Clique em "Adicionar Item" para começar.</td></tr>'
     :items.map((it,i)=>`
     <tr class="border-b border-border">
-      <td class="p-2"><input type="text" value="${esc(it.desc||'')}" oninput="items[${i}].desc=this.value" class="bg-surface border border-border rounded p-1 text-xs text-textMain outline-none focus:border-accent w-full" placeholder="Descrição"></td>
+      <td class="p-2">
+        <input type="text" value="${esc(it.desc||'')}" oninput="updateItemDesc(${i}, this.value)" class="bg-surface border border-border rounded p-1 text-xs text-textMain outline-none focus:border-accent w-full" placeholder="Descrição" list="inv-list">
+        <datalist id="inv-list">
+          ${app.inventory.map(inv => `<option value="${esc(inv.name)}">`).join('')}
+        </datalist>
+      </td>
       <td class="p-2"><input type="number" value="${it.qty||1}" min="0.01" step="0.01" oninput="items[${i}].qty=parseFloat(this.value)||0;items[${i}].total=+(items[${i}].qty*items[${i}].unit).toFixed(2);calcTot()" class="bg-surface border border-border rounded p-1 text-xs text-textMain outline-none focus:border-accent w-full text-center"></td>
       <td class="p-2"><input type="number" value="${it.unit||0}" min="0" step="0.01" oninput="items[${i}].unit=parseFloat(this.value)||0;items[${i}].total=+(items[${i}].qty*items[${i}].unit).toFixed(2);calcTot()" class="bg-surface border border-border rounded p-1 text-xs text-textMain outline-none focus:border-accent w-full text-right"></td>
       <td class="p-2 text-right font-bold text-accent">${fmt(it.total||0)}</td>
       <td class="p-2"><button class="p-1 text-textDim hover:text-error transition-colors" onclick="remItem(${i})"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></td>
     </tr>`).join('');
+}
+
+function updateItemDesc(i, val){
+  items[i].desc = val;
+  const part = app.inventory.find(p => p.name === val);
+  if(part){
+    items[i].unit = part.unit_price;
+    items[i].total = +(items[i].qty * part.unit_price).toFixed(2);
+    calcTot();
+    renderItems();
+  }
 }
 function addItem(){ items.push({desc:'',qty:1,unit:0,total:0}); renderItems(); calcTot(); }
 function remItem(i){ items.splice(i,1); renderItems(); calcTot(); }
@@ -619,18 +741,36 @@ async function saveOrder(){
     notes:ge('om-obs').value.trim(), date:new Date().toISOString()
   };
   btnLoad('om-save-btn',true);
-  let res;
-  if(id){
-    res=await db.from('orders').update(oToDB(order,false)).eq('id',id).select().single();
-  } else {
-    res=await db.from('orders').insert(oToDB(order,true)).select().single();
+  
+  try {
+    // Baixa no Estoque
+    for(const it of items){
+      const part = app.inventory.find(p => p.name === it.desc);
+      if(part){
+        const newQty = part.quantity - it.qty;
+        if(newQty < 0){
+          throw new Error(`Estoque insuficiente para a peça: ${it.desc}. Disponível: ${part.quantity}`);
+        }
+        await db.from('inventory').update({ quantity: newQty }).eq('id', part.id);
+      }
+    }
+
+    let res;
+    if(id){
+      res=await db.from('orders').update(oToDB(order,false)).eq('id',id).select().single();
+    } else {
+      res=await db.from('orders').insert(oToDB(order,true)).select().single();
+    }
+    if(res.error) throw res.error;
+    const newO=oFromDB(res.data);
+    if(id){const i=app.orders.findIndex(x=>x.id===id);if(i>=0)app.orders[i]=newO;}
+    else app.orders.push(newO);
+    closeModal('om'); render(); toast('✓ OS #'+String(newO.number).padStart(4,'0')+' salva com sucesso');
+  } catch (e) {
+    toast('❌ Erro: ' + e.message);
+  } finally {
+    btnLoad('om-save-btn',false);
   }
-  btnLoad('om-save-btn',false);
-  if(res.error){toast('❌ Erro: '+res.error.message);return;}
-  const newO=oFromDB(res.data);
-  if(id){const i=app.orders.findIndex(x=>x.id===id);if(i>=0)app.orders[i]=newO;}
-  else app.orders.push(newO);
-  closeModal('om'); render(); toast('✓ OS #'+String(newO.number).padStart(4,'0')+' salva com sucesso');
 }
 
 async function delO(id){
