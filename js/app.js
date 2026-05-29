@@ -1,10 +1,12 @@
 // ── STATE ─────────────────────────────────────────
 let app = {
-  vehicles: [], orders: [], inventory: [],
+  vehicles: [], orders: [], inventory: [], sales: [],
   workshop: { name:'Minha Oficina', cnpj:'', address:'', city:'', phone:'', email:'', resp:'' },
-  view: 'dashboard'
+  view: 'dashboard',
+  cart: []
 };
 let items = [];
+
 
 // ── HELPERS ───────────────────────────────────────
 const ge = id => document.getElementById(id);
@@ -148,16 +150,18 @@ async function load(){
   showLoad('Conectando ao banco de dados...');
   setConn('loading','Conectando...');
   try {
-    const [wsR, vR, oR, iR] = await Promise.all([
+    const [wsR, vR, oR, iR, sR] = await Promise.all([
       db.from('workshop_settings').select('*').eq('id',1).maybeSingle(),
       db.from('vehicles').select('*').order('created_at',{ascending:true}),
       db.from('orders').select('*').order('number',{ascending:true}),
-      db.from('inventory').select('*').order('name',{ascending:true})
+      db.from('inventory').select('*').order('name',{ascending:true}),
+      db.from('sales').select('*').order('created_at',{ascending:false})
     ]);
     if(wsR.error) throw wsR.error;
     if(vR.error) throw vR.error;
     if(oR.error) throw oR.error;
     if(iR.error) throw iR.error;
+    if(sR.error) throw sR.error;
     if(wsR.data){
       app.workshop = {
         name:wsR.data.name||'Minha Oficina', cnpj:wsR.data.cnpj||'',
@@ -168,6 +172,7 @@ async function load(){
     app.vehicles = (vR.data||[]).map(vFromDB);
     app.orders = (oR.data||[]).map(oFromDB);
     app.inventory = (iR.data||[]);
+    app.sales = (sR.data||[]);
     ge('sb-wn').textContent = app.workshop.name;
     setConn('ok','Conectado');
   } catch(e){
@@ -195,7 +200,7 @@ function nav(view){
 }
 function render(){
   try {
-    const views={dashboard:dashView,vehicles:vehView,inventory:invView,orders:ordView,settings:setView};
+    const views={dashboard:dashView,vehicles:vehView,inventory:invView,pos:posView,orders:ordView,history:histView,settings:setView};
     ge('ct').innerHTML=(views[app.view]||dashView)();
   } catch (e) {
     console.error('Render Error:', e);
@@ -779,7 +784,243 @@ async function delO(id){
   render(); toast('Ordem removida');
 }
 
-// ── PRINT ─────────────────────────────────────────
+// ── POS (CAIXA) ────────────────────────────────────
+function addToCart(id){
+  const item = app.inventory.find(i => i.id === id);
+  if(!item) return;
+  if(item.quantity <= 0){ toast('❌ Peça sem estoque!'); return; }
+  
+  const existing = app.cart.find(c => c.id === id);
+  if(existing){
+    if(existing.qty < item.quantity){ existing.qty++; }
+    else { toast('❌ Limite de estoque atingido!'); return; }
+  } else {
+    app.cart.push({ id: item.id, name: item.name, price: item.unit_price, qty: 1 });
+  }
+  render();
+}
+function remCart(id){
+  app.cart = app.cart.filter(c => c.id !== id);
+  render();
+}
+function updateCartQty(id, delta){
+  const item = app.cart.find(c => c.id === id);
+  const inv = app.inventory.find(i => i.id === id);
+  if(!item || !inv) return;
+  const newQty = item.qty + delta;
+  if(newQty <= 0) return remCart(id);
+  if(newQty > inv.quantity){ toast('❌ Estoque insuficiente!'); return; }
+  item.qty = newQty;
+  render();
+}
+function calcCartTot(){
+  const sub = app.cart.reduce((s,i)=> s + (i.price * i.qty), 0);
+  const disc = parseFloat(ge('pos-disc')?.value || 0);
+  return { sub, disc, total: sub - disc };
+}
+
+async function finalizeSale(){
+  const custId = ge('pos-cust')?.value;
+  const method = ge('pos-pay')?.value;
+  const disc = parseFloat(ge('pos-disc')?.value || 0);
+  if(app.cart.length === 0){ alert('Carrinho vazio!'); return; }
+  if(!method){ alert('Selecione a forma de pagamento!'); return; }
+  
+  const { sub, total } = calcCartTot();
+  btnLoad('pos-save-btn', true);
+  
+  try {
+    const { data: sale, error: sErr } = await db.from('sales').insert({
+      customer_id: custId || null, total, discount: disc, payment_method: method
+    }).select().single();
+    if(sErr) throw sErr;
+    
+    const itemsToSave = app.cart.map(c => ({
+      sale_id: sale.id, inventory_id: c.id, quantity: c.qty, unit_price: c.price, subtotal: c.price * c.qty
+    }));
+    const { error: iErr } = await db.from('sale_items').insert(itemsToSave);
+    if(iErr) throw iErr;
+    
+    for(const c of app.cart){
+      const { error: invErr } = await db.from('inventory').update({ quantity: app.inventory.find(i=>i.id===c.id).quantity - c.qty }).eq('id', c.id);
+      if(invErr) console.error('Erro ao baixar estoque:', invErr);
+    }
+    
+    app.cart = [];
+    await load();
+    render();
+    printReceipt(sale.id);
+    toast('✓ Venda finalizada com sucesso!');
+  } catch(e) {
+    toast('❌ Erro na venda: ' + e.message);
+  } finally {
+    btnLoad('pos-save-btn', false);
+  }
+}
+
+function posView(){
+  const totalData = calcCartTot();
+  const rows = app.cart.map(c => `
+    <tr class="border-b border-border text-xs">
+      <td class="p-2">${esc(c.name)}</td>
+      <td class="p-2 text-center">
+        <div class="flex items-center justify-center gap-2">
+          <button onclick="updateCartQty('${c.id}',-1)" class="w-5 h-5 bg-surface2 border border-border rounded">-</button>
+          <span>${c.qty}</span>
+          <button onclick="updateCartQty('${c.id}',1)" class="w-5 h-5 bg-surface2 border border-border rounded">+</button>
+        </div>
+      </td>
+      <td class="p-2 text-right">${fmt(c.price)}</td>
+      <td class="p-2 text-right font-bold">${fmt(c.price * c.qty)}</td>
+      <td class="p-2 text-center"><button onclick="remCart('${c.id}')" class="text-error">×</button></td>
+    </tr>`).join('');
+
+  return `
+  <div class="flex flex-col lg:flex-row gap-6 h-full">
+    <div class="flex-1 bg-surface border border-border rounded-xl p-4 overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-rajdhani font-bold">Catálogo de Peças</h2>
+        <input type="text" oninput="filterPos(this.value)" id="pos-search" class="bg-surface2 border border-border rounded-lg p-2 text-xs text-textMain outline-none focus:border-accent transition-colors w-full max-w-xs" placeholder="Buscar peça...">
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto" id="pos-grid">
+        ${app.inventory.map(i => `
+          <button onclick="addToCart('${i.id}')" class="p-3 bg-surface2 border border-border rounded-lg text-left hover:border-accent transition-all group">
+            <div class="text-xs font-bold truncate">${esc(i.name)}</div>
+            <div class="text-[10px] text-textMuted">${fmt(i.unit_price)}</div>
+            <div class="text-[10px] ${i.quantity<=i.min_quantity?'text-error':'text-success'} mt-1">Estoque: ${i.quantity}</div>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+    <div class="w-full lg:w-96 bg-surface border border-border rounded-xl p-4 flex flex-col">
+      <h2 class="text-xl font-rajdhani font-bold mb-4">Carrinho</h2>
+      <div class="flex-1 overflow-y-auto mb-4">
+        <table class="w-full text-left">
+          <thead><tr class="text-[10px] text-textDim uppercase border-b border-border"><th class="pb-2">Item</th><th class="pb-2 text-center">Qtd</th><th class="pb-2 text-right">Uni</th><th class="pb-2 text-right">Tot</th><th class="pb-2"></th></tr></thead>
+          <tbody>${app.cart.length===0?'<tr><td colspan="5" class="p-4 text-center text-textDim text-xs">Carrinho vazio</td></tr>':rows}</tbody>
+        </table>
+      </div>
+      <div class="space-y-3 border-t border-border pt-4">
+        <div class="flex flex-col gap-1">
+          <label class="text-[10px] text-textMuted uppercase">Cliente (Opcional)</label>
+          <input type="text" id="pos-cust" list="pos-cust-list" class="bg-surface2 border border-border rounded p-2 text-xs outline-none focus:border-accent" placeholder="Nome do cliente">
+          <datalist id="pos-cust-list">${app.vehicles.map(v=>`<option value="${esc(v.client.name)}">`).join('')}</datalist>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[10px] text-textMuted uppercase">Pagamento</label>
+          <select id="pos-pay" class="bg-surface2 border border-border rounded p-2 text-xs outline-none focus:border-accent">
+            <option value="">Selecione...</option>
+            <option value="Pix">Pix</option>
+            <option value="Cartão Crédito">Cartão Crédito</option>
+            <option value="Cartão Débito">Cartão Débito</option>
+            <option value="Dinheiro">Dinheiro</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[10px] text-textMuted uppercase">Desconto (R$)</label>
+          <input type="number" id="pos-disc" oninput="render()" value="0" class="bg-surface2 border border-border rounded p-2 text-xs outline-none focus:border-accent">
+        </div>
+        <div class="flex justify-between items-center py-2 border-t border-border">
+          <span class="text-sm font-semibold">Total:</span>
+          <span class="text-2xl font-rajdhani font-bold text-accent">${fmt(totalData.total)}</span>
+        </div>
+        <button id="pos-save-btn" onclick="finalizeSale()" class="w-full bg-accent hover:bg-accentHover text-white py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-2">
+          Finalizar Venda
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function filterPos(val){
+  const grid = ge('pos-grid');
+  const filtered = app.inventory.filter(i => i.name.toLowerCase().includes(val.toLowerCase()));
+  grid.innerHTML = filtered.map(i => `
+    <button onclick="addToCart('${i.id}')" class="p-3 bg-surface2 border border-border rounded-lg text-left hover:border-accent transition-all group">
+      <div class="text-xs font-bold truncate">${esc(i.name)}</div>
+      <div class="text-[10px] text-textMuted">${fmt(i.unit_price)}</div>
+      <div class="text-[10px] ${i.quantity<=i.min_quantity?'text-error':'text-success'} mt-1">Estoque: ${i.quantity}</div>
+    </button>
+  `).join('');
+}
+
+async function histView(){
+  const sales = app.sales;
+  const rows = sales.length === 0 ? emptyRow(6) : sales.map(s => `
+    <tr class="border-b border-border hover:bg-surface2 transition-colors">
+      <td class="p-3 text-xs">${fmtD(s.created_at)}</td>
+      <td class="p-3 text-xs">${esc(s.customer_id || 'Avulsa')}</td>
+      <td class="p-3 text-xs">${s.payment_method}</td>
+      <td class="p-3 text-xs font-bold text-accent">${fmt(s.total)}</td>
+      <td class="p-3">
+        <button onclick="printSale('${s.id}')" class="p-1.5 bg-transparent border border-border text-textMuted hover:text-textMain rounded-lg transition-colors" title="Imprimir Comprovante">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        </button>
+      </td>
+    </tr>`).join('');
+
+  return `
+  <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-rajdhani font-bold tracking-tight">Histórico de Vendas</h1>
+      <p class="text-xs text-textMuted">Relatório de transações do caixa</p>
+    </div>
+  </header>
+  <div class="bg-surface border border-border rounded-xl overflow-hidden">
+    <div class="p-4 border-b border-border flex justify-between items-center">
+      <h3 class="text-sm font-semibold">Vendas Realizadas</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead>
+          <tr class="bg-surface2 text-textDim uppercase tracking-wider">
+            <th class="p-3 border-b border-border">Data</th>
+            <th class="p-3 border-b border-border">Cliente</th>
+            <th class="p-3 border-b border-border">Pagamento</th>
+            <th class="p-3 border-b border-border">Total</th>
+            <th class="p-3 border-b border-border">Ações</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+async function printSale(id){
+  const sale = app.sales.find(s => s.id === id);
+  if(!sale) return;
+  const { data: items } = await db.from('sale_items').select('*').eq('sale_id', id);
+  const w = app.workshop;
+  
+  const itRows = items.map(i => `<tr><td>${esc(i.inventory_id)}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${fmt(i.unit_price)}</td><td style="text-align:right">${fmt(i.subtotal)}</td></tr>`).join('');
+  
+  ge('prt').innerHTML = `
+    <div style="text-align:center; font-family: monospace; width: 80mm; margin: 0 auto;">
+      <div style="font-weight: bold; font-size: 16px;">${esc(w.name)}</div>
+      <div style="font-size: 10px;">${esc(w.cnpj)} | ${esc(w.phone)}</div>
+      <div style="border-bottom: 1px dashed #000; margin: 10px 0;"></div>
+      <div style="text-align: left; font-size: 12px;">Data: ${fmtD(sale.created_at)}</div>
+      <div style="text-align: left; font-size: 12px;">Cliente: ${esc(sale.customer_id || 'Avulsa')}</div>
+      <div style="border-bottom: 1px dashed #000; margin: 10px 0;"></div>
+      <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+        <thead><tr style="border-bottom: 1px solid #000"><th>Item</th><th>Qtd</th><th>Uni</th><th>Tot</th></tr></thead>
+        <tbody>${itRows}</tbody>
+      </table>
+      <div style="border-top: 1px solid #000; margin-top: 10px; padding-top: 5px; text-align: right; font-weight: bold; font-size: 16px;">
+        TOTAL: ${fmt(sale.total)}
+      </div>
+      <div style="text-align: center; font-size: 10px; margin-top: 20px;">Obrigado pela preferência!</div>
+    </div>
+  `;
+  window.print();
+}
+
+function printReceipt(id){
+  printSale(id);
+}
+
+
 function printO(id){
   const o=app.orders.find(x=>x.id===id); if(!o)return;
   const w=app.workshop;
