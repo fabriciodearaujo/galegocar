@@ -748,15 +748,24 @@ async function saveOrder(){
   btnLoad('om-save-btn',true);
   
   try {
+    console.log('Iniciando processamento de itens da OS...');
     // Baixa no Estoque
     for(const it of items){
-      const part = app.inventory.find(p => p.name === it.desc);
+      if(!it.desc) continue;
+      
+      // Busca a peça ignorando espaços extras
+      const part = app.inventory.find(p => p.name.trim().toLowerCase() === it.desc.trim().toLowerCase());
+      
       if(part){
-        const newQty = part.quantity - it.qty;
+        console.log(`Peça encontrada: ${part.name}. Qtd atual: ${part.quantity}. Baixa: ${it.qty}`);
+        const newQty = parseFloat(part.quantity) - parseFloat(it.qty);
         if(newQty < 0){
           throw new Error(`Estoque insuficiente para a peça: ${it.desc}. Disponível: ${part.quantity}`);
         }
-        await db.from('inventory').update({ quantity: newQty }).eq('id', part.id);
+        const { error: uErr } = await db.from('inventory').update({ quantity: newQty }).eq('id', part.id);
+        if(uErr) console.error('Erro ao atualizar estoque:', uErr);
+      } else {
+        console.log(`Item "${it.desc}" não identificado como peça de estoque (ignorado para baixa).`);
       }
     }
   
@@ -771,9 +780,10 @@ async function saveOrder(){
     if(id){const i=app.orders.findIndex(x=>x.id===id);if(i>=0)app.orders[i]=newO;}
     else app.orders.push(newO);
     
-    await load(); // Força a atualização do estoque e dados no app.inventory
+    await load(); 
     closeModal('om'); render(); toast('✓ OS #'+String(newO.number).padStart(4,'0')+' salva com sucesso');
   } catch (e) {
+    console.error('Erro no saveOrder:', e);
     toast('❌ Erro: ' + e.message);
   } finally {
     btnLoad('om-save-btn',false);
