@@ -959,9 +959,14 @@ function histView(){
       <td class="p-3 text-xs">${s.payment_method}</td>
       <td class="p-3 text-xs font-bold text-accent">${fmt(s.total)}</td>
       <td class="p-3">
-        <button onclick="printSale('${s.id}')" class="p-1.5 bg-transparent border border-border text-textMuted hover:text-textMain rounded-lg transition-colors" title="Imprimir Comprovante">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        </button>
+        <div class="flex gap-2">
+          <button onclick="printSale('${s.id}')" class="p-1.5 bg-transparent border border-border text-textMuted hover:text-textMain rounded-lg transition-colors" title="Imprimir Comprovante">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          </button>
+          <button onclick="delSale('${s.id}')" class="p-1.5 bg-error/10 text-error border border-error/20 hover:bg-error/20 rounded-lg transition-colors" title="Excluir Venda">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </div>
       </td>
     </tr>`;
   }).join('');
@@ -993,6 +998,16 @@ function histView(){
     </div>
   </div>`;
 }
+
+async function delSale(id){
+  if(!confirm('Excluir esta venda? Esta ação não pode ser desfeita.')) return;
+  const { error } = await db.from('sales').delete().eq('id', id);
+  if(error){ toast('❌ Erro ao excluir: ' + error.message); return; }
+  app.sales = app.sales.filter(s => s.id !== id);
+  render();
+  toast('✓ Venda removida');
+}
+
 
 async function printSale(id){
   const sale = app.sales.find(s => s.id === id);
