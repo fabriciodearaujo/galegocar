@@ -817,14 +817,14 @@ function updateCartQty(id, delta){
 }
 function calcCartTot(){
   const sub = app.cart.reduce((s,i)=> s + (i.price * i.qty), 0);
-  const disc = parseFloat(ge('pos-disc')?.value || 0);
+  const disc = parseFloat(ge('pos-disc')?.value) || 0;
   return { sub, disc, total: sub - disc };
 }
 
 async function finalizeSale(){
   const custName = ge('pos-cust')?.value;
   const method = ge('pos-pay')?.value;
-  const disc = parseFloat(ge('pos-disc')?.value || 0);
+  const disc = parseFloat(ge('pos-disc')?.value) || 0;
   if(app.cart.length === 0){ alert('Carrinho vazio!'); return; }
   if(!method){ alert('Selecione a forma de pagamento!'); return; }
   
