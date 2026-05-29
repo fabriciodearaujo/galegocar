@@ -834,7 +834,9 @@ async function finalizeSale(){
   
   try {
     const { data: sale, error: sErr } = await db.from('sales').insert({
-      customer_id: custId, total, discount: disc, payment_method: method
+      customer_id: custId, 
+      customer_name: custName || 'Avulsa',
+      total, discount: disc, payment_method: method
     }).select().single();
     if(sErr) throw sErr;
     
@@ -950,8 +952,7 @@ function filterPos(val){
 function histView(){
   const sales = app.sales;
   const rows = sales.length === 0 ? emptyRow(6) : sales.map(s => {
-    const vehicle = app.vehicles.find(v => v.id === s.customer_id);
-    const clientName = vehicle ? vehicle.client.name : 'Avulsa';
+    const clientName = s.customer_name || (app.vehicles.find(v => v.id === s.customer_id)?.client.name) || 'Avulsa';
     return `
     <tr class="border-b border-border hover:bg-surface2 transition-colors">
       <td class="p-3 text-xs">${fmtD(s.created_at)}</td>
@@ -1066,8 +1067,7 @@ async function printSale(id){
     return `<tr><td>${esc(name)}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${fmt(i.unit_price)}</td><td style="text-align:right">${fmt(i.subtotal)}</td></tr>`;
   }).join('');
   
-  const vehicle = app.vehicles.find(v => v.id === sale.customer_id);
-  const clientName = vehicle ? vehicle.client.name : 'Avulsa';
+  const clientName = sale.customer_name || (app.vehicles.find(v => v.id === sale.customer_id)?.client.name) || 'Avulsa';
 
   ge('prt').innerHTML = `
     <div style="text-align:center; font-family: monospace; width: 80mm; margin: 0 auto;">
