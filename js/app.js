@@ -770,6 +770,8 @@ async function saveOrder(){
     const newO=oFromDB(res.data);
     if(id){const i=app.orders.findIndex(x=>x.id===id);if(i>=0)app.orders[i]=newO;}
     else app.orders.push(newO);
+    
+    await load(); // Força a atualização do estoque e dados no app.inventory
     closeModal('om'); render(); toast('✓ OS #'+String(newO.number).padStart(4,'0')+' salva com sucesso');
   } catch (e) {
     toast('❌ Erro: ' + e.message);
