@@ -947,12 +947,15 @@ function filterPos(val){
   `).join('');
 }
 
-async function histView(){
+function histView(){
   const sales = app.sales;
-  const rows = sales.length === 0 ? emptyRow(6) : sales.map(s => `
+  const rows = sales.length === 0 ? emptyRow(6) : sales.map(s => {
+    const vehicle = app.vehicles.find(v => v.id === s.customer_id);
+    const clientName = vehicle ? vehicle.client.name : 'Avulsa';
+    return `
     <tr class="border-b border-border hover:bg-surface2 transition-colors">
       <td class="p-3 text-xs">${fmtD(s.created_at)}</td>
-      <td class="p-3 text-xs">${esc(s.customer_id || 'Avulsa')}</td>
+      <td class="p-3 text-xs">${esc(clientName)}</td>
       <td class="p-3 text-xs">${s.payment_method}</td>
       <td class="p-3 text-xs font-bold text-accent">${fmt(s.total)}</td>
       <td class="p-3">
@@ -960,7 +963,8 @@ async function histView(){
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         </button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   return `
   <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -996,15 +1000,22 @@ async function printSale(id){
   const { data: items } = await db.from('sale_items').select('*').eq('sale_id', id);
   const w = app.workshop;
   
-  const itRows = items.map(i => `<tr><td>${esc(i.inventory_id)}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${fmt(i.unit_price)}</td><td style="text-align:right">${fmt(i.subtotal)}</td></tr>`).join('');
+  const itRows = items.map(i => {
+    const part = app.inventory.find(p => p.id === i.inventory_id);
+    const name = part ? part.name : 'Item não encontrado';
+    return `<tr><td>${esc(name)}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${fmt(i.unit_price)}</td><td style="text-align:right">${fmt(i.subtotal)}</td></tr>`;
+  }).join('');
   
+  const vehicle = app.vehicles.find(v => v.id === sale.customer_id);
+  const clientName = vehicle ? vehicle.client.name : 'Avulsa';
+
   ge('prt').innerHTML = `
     <div style="text-align:center; font-family: monospace; width: 80mm; margin: 0 auto;">
       <div style="font-weight: bold; font-size: 16px;">${esc(w.name)}</div>
       <div style="font-size: 10px;">${esc(w.cnpj)} | ${esc(w.phone)}</div>
       <div style="border-bottom: 1px dashed #000; margin: 10px 0;"></div>
       <div style="text-align: left; font-size: 12px;">Data: ${fmtD(sale.created_at)}</div>
-      <div style="text-align: left; font-size: 12px;">Cliente: ${esc(sale.customer_id || 'Avulsa')}</div>
+      <div style="text-align: left; font-size: 12px;">Cliente: ${esc(clientName)}</div>
       <div style="border-bottom: 1px dashed #000; margin: 10px 0;"></div>
       <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
         <thead><tr style="border-bottom: 1px solid #000"><th>Item</th><th>Qtd</th><th>Uni</th><th>Tot</th></tr></thead>
