@@ -709,10 +709,13 @@ function updateItemDesc(i, val){
   items[i].desc = val;
   const part = app.inventory.find(p => p.name === val);
   if(part){
+    items[i].inventoryId = part.id; // Guarda o ID para a baixa no estoque
     items[i].unit = part.unit_price;
     items[i].total = +(items[i].qty * part.unit_price).toFixed(2);
     calcTot();
     renderItems();
+  } else {
+    delete items[i].inventoryId; // Remove o ID se o nome mudar e não for mais uma peça
   }
 }
 function addItem(){ items.push({desc:'',qty:1,unit:0,total:0}); renderItems(); calcTot(); }
@@ -748,24 +751,17 @@ async function saveOrder(){
   btnLoad('om-save-btn',true);
   
   try {
-    console.log('Iniciando processamento de itens da OS...');
-    // Baixa no Estoque
+    // Baixa no Estoque via ID (Muito mais seguro)
     for(const it of items){
-      if(!it.desc) continue;
-      
-      // Busca a peça ignorando espaços extras
-      const part = app.inventory.find(p => p.name.trim().toLowerCase() === it.desc.trim().toLowerCase());
-      
-      if(part){
-        console.log(`Peça encontrada: ${part.name}. Qtd atual: ${part.quantity}. Baixa: ${it.qty}`);
-        const newQty = parseFloat(part.quantity) - parseFloat(it.qty);
-        if(newQty < 0){
-          throw new Error(`Estoque insuficiente para a peça: ${it.desc}. Disponível: ${part.quantity}`);
+      if(it.inventoryId){
+        const { data: part } = await db.from('inventory').select('quantity').eq('id', it.inventoryId).single();
+        if(part){
+          const newQty = parseFloat(part.quantity) - parseFloat(it.qty);
+          if(newQty < 0){
+            throw new Error(`Estoque insuficiente para a peça: ${it.desc}. Disponível: ${part.quantity}`);
+          }
+          await db.from('inventory').update({ quantity: newQty }).eq('id', it.inventoryId);
         }
-        const { error: uErr } = await db.from('inventory').update({ quantity: newQty }).eq('id', part.id);
-        if(uErr) console.error('Erro ao atualizar estoque:', uErr);
-      } else {
-        console.log(`Item "${it.desc}" não identificado como peça de estoque (ignorado para baixa).`);
       }
     }
   
@@ -783,7 +779,6 @@ async function saveOrder(){
     await load(); 
     closeModal('om'); render(); toast('✓ OS #'+String(newO.number).padStart(4,'0')+' salva com sucesso');
   } catch (e) {
-    console.error('Erro no saveOrder:', e);
     toast('❌ Erro: ' + e.message);
   } finally {
     btnLoad('om-save-btn',false);
